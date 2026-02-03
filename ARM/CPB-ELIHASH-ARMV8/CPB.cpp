@@ -127,14 +127,14 @@ int main(int argc, char **argv) {
 		printf("Usage: [output_filename]\n");
 		return 0;
 	} 
-    constexpr double CPU_FREQ = 3.2e9; // Apple M1 ≈ 3.2 GHz
+    constexpr double CPU_FREQ = 2.4e9; // Apple M1 ≈ 3.2 GHz
     constexpr int ITER = 100000;
 
 
 
     std::ofstream file(argv[1]);
 
-    file << "ParaHash-V3 polinomial reduction\n";
+    file << "EliHash\n";
     file << get_cpu_name() << "\n";
     file << get_compiler_info() << " (" << get_cpp_standard() << ")\n";
     file << get_arch_info() << "\n";

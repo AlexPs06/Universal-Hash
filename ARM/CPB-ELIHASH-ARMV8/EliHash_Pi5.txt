@@ -1,0 +1,30 @@
+EliHash
+Raspberry Pi 5 Model B Rev 1.0
+Clang C++14.0.6 (C++17)
+ARM64 + NEON + Crypto
+Run 2026-02-02 23:16:14
+
+256 -- 0.0103005 s  (0.96567 cpb) Key generation
+256 -- 0.00535931 s  (0.502436 cpb) EliHash
+Tag: 7c9454689e19d878461f5326ea1218af
+512 -- 0.0191293 s  (0.896687 cpb) Key generation
+512 -- 0.00805427 s  (0.377544 cpb) EliHash
+Tag: e6bb8fe0dfc3cee608eb7b47005371b2
+1024 -- 0.0346331 s  (0.811714 cpb) Key generation
+1024 -- 0.0206793 s  (0.484672 cpb) EliHash
+Tag: 497666fd85b9c8b5d6e622079bd48dfd
+2048 -- 0.0565952 s  (0.663225 cpb) Key generation
+2048 -- 0.0219951 s  (0.257756 cpb) EliHash
+Tag: d9f836ca14e72b6ff68f7cab580bce10
+4096 -- 0.0988461 s  (0.579176 cpb) Key generation
+4096 -- 0.044592 s  (0.261281 cpb) EliHash
+Tag: 754df556d0105cf792c5247f01daf0ab
+8192 -- 0.19537 s  (0.572374 cpb) Key generation
+8192 -- 0.0873565 s  (0.255927 cpb) EliHash
+Tag: 403809b4842020b9a1d8a5246b9747d7
+16384 -- 0.38685 s  (0.566674 cpb) Key generation
+16384 -- 0.176384 s  (0.258374 cpb) EliHash
+Tag: d74ae931925d6532fa3987515380b961
+32768 -- 0.779441 s  (0.57088 cpb) Key generation
+32768 -- 0.347219 s  (0.254311 cpb) EliHash
+Tag: 20c50fdd9ba09300a3c9c01994974f35
