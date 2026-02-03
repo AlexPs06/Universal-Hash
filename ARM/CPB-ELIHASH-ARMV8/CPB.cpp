@@ -13,7 +13,7 @@
 #include <ctime>
 #include <iomanip>
 #include <string>
-#include <sys/sysctl.h>
+// #include <sys/sysctl.h>
 #include <sstream>
 
 #define tag_size 16
@@ -34,15 +34,30 @@ void write_tag_hex(std::ofstream& file, const uint8_t* tag, size_t len = 64) {
 }
 
 
+// std::string get_cpu_name() {
+//     char buffer[256];
+//     size_t size = sizeof(buffer);
+//     if (sysctlbyname("machdep.cpu.brand_string", buffer, &size, nullptr, 0) == 0) {
+//         return std::string(buffer);
+//     }
+//     return "Unknown CPU";
+// }
+
 std::string get_cpu_name() {
-    char buffer[256];
-    size_t size = sizeof(buffer);
-    if (sysctlbyname("machdep.cpu.brand_string", buffer, &size, nullptr, 0) == 0) {
-        return std::string(buffer);
+    std::ifstream cpuinfo("/proc/cpuinfo");
+    std::string line;
+
+    while (std::getline(cpuinfo, line)) {
+        if (line.find("model name") != std::string::npos ||
+            line.find("Model") != std::string::npos) {
+
+            auto pos = line.find(':');
+            if (pos != std::string::npos)
+                return line.substr(pos + 2);
+        }
     }
     return "Unknown CPU";
 }
-
 std::string get_compiler_info() {
 #ifdef __clang__
     return "Clang C++" +
