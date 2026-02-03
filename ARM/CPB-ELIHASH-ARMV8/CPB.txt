@@ -1,0 +1,30 @@
+ParaHash-V3 polinomial reduction
+Apple M1
+Clang C++17.0.0 (C++17)
+ARM64 + NEON + Crypto
+Run 2026-01-28 13:07:41
+
+256 -- 0.00464158 s  (0.580198 cpb) Key generation
+256 -- 0.00795971 s  (0.994963 cpb) Para-Hash
+Tag: c1895c1418b273cacb9679fd4358831b5dc2484b7cfe55d3308e1e26bd049bb9
+512 -- 0.00900387 s  (0.562742 cpb) Key generation
+512 -- 0.0153145 s  (0.957159 cpb) Para-Hash
+Tag: faef1006263e8112fe820c181ef402816c968018069c860ce45ba6cfc6f388d8
+1024 -- 0.0124015 s  (0.387547 cpb) Key generation
+1024 -- 0.0205335 s  (0.641672 cpb) Para-Hash
+Tag: a1b68969241493cd23883e72ee0d02914146cc41cf55ffe0affa9db60cf2d4f5
+2048 -- 0.0167506 s  (0.261728 cpb) Key generation
+2048 -- 0.0291532 s  (0.455519 cpb) Para-Hash
+Tag: 7892af525f219ff96698def4b36505da7452716dade64675ba8000ce8bfa8e44
+4096 -- 0.0285928 s  (0.223382 cpb) Key generation
+4096 -- 0.055308 s  (0.432094 cpb) Para-Hash
+Tag: 285ffab0925a787c07ba2b86820733c32089b42893df93c803e5cb8ef6b6305c
+8192 -- 0.0566247 s  (0.22119 cpb) Key generation
+8192 -- 0.110718 s  (0.432494 cpb) Para-Hash
+Tag: b1c39df5fa03186db4caaa0c6dedfda6f637de69fcaab55a733cfdfc5790af7c
+16384 -- 0.113089 s  (0.220877 cpb) Key generation
+16384 -- 0.220513 s  (0.430689 cpb) Para-Hash
+Tag: 078998eda97f606e554e69e02f30d5318bb07388a4a013a0cd171c840ed91bf1
+32768 -- 0.244995 s  (0.239253 cpb) Key generation
+32768 -- 0.444108 s  (0.433699 cpb) Para-Hash
+Tag: 77e6ea970eced86a94fb279e17d936889a0b554beecfd050654579d16e8a9682

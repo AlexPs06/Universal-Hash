@@ -1,0 +1,30 @@
+ParaHash-V3 polinomial reduction
+Apple M1
+Clang C++17.0.0 (C++17)
+ARM64 + NEON + Crypto
+Run 2026-01-30 22:29:27
+
+256 -- 0.0022665 s  (0.283312 cpb) Key generation
+256 -- 0.00147817 s  (0.184771 cpb) EliHash
+Tag: 7c9454689e19d878461f5326ea1218af
+512 -- 0.00423379 s  (0.264612 cpb) Key generation
+512 -- 0.00274258 s  (0.171411 cpb) EliHash
+Tag: e6bb8fe0dfc3cee608eb7b47005371b2
+1024 -- 0.00808754 s  (0.252736 cpb) Key generation
+1024 -- 0.00477237 s  (0.149137 cpb) EliHash
+Tag: 497666fd85b9c8b5d6e622079bd48dfd
+2048 -- 0.0146718 s  (0.229246 cpb) Key generation
+2048 -- 0.00865346 s  (0.13521 cpb) EliHash
+Tag: d9f836ca14e72b6ff68f7cab580bce10
+4096 -- 0.0285729 s  (0.223226 cpb) Key generation
+4096 -- 0.0166086 s  (0.129755 cpb) EliHash
+Tag: 754df556d0105cf792c5247f01daf0ab
+8192 -- 0.0569284 s  (0.222376 cpb) Key generation
+8192 -- 0.0326603 s  (0.127579 cpb) EliHash
+Tag: 403809b4842020b9a1d8a5246b9747d7
+16384 -- 0.113238 s  (0.221168 cpb) Key generation
+16384 -- 0.064611 s  (0.126193 cpb) EliHash
+Tag: d74ae931925d6532fa3987515380b961
+32768 -- 0.226116 s  (0.220817 cpb) Key generation
+32768 -- 0.128602 s  (0.125588 cpb) EliHash
+Tag: 20c50fdd9ba09300a3c9c01994974f35
