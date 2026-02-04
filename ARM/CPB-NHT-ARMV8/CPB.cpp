@@ -1,200 +1,243 @@
-#include <stdio.h>
-#include <time.h>
-#include <stdlib.h>
 #include <arm_neon.h>
-#include <stdint.h>
-#include <stdio.h>
+#include <chrono>
+#include <cstdint>
 #include <cstring>
-#include "AES-intrinsics.h"
-
-#define ALIGN(n) __attribute__ ((aligned(n)))
-#define size_message 16777216   // Tamaño del mensaje a procesar
-#define Nr 10   // Número de rondas para AES-128
-
+#include <fstream>
+#include <iostream>
+#include <vector>
+#include "NHT.h"
 
 
-char infoString[] = "EliMAC ARM CORTEX A76 RaspberryPi5";  /* Each AE implementation must have a global one */
 
-#ifndef MAX_ITER
-#define MAX_ITER 1024
+
+#include <ctime>
+#include <iomanip>
+#include <string>
+// #include <sys/sysctl.h>
+#include <sstream>
+
+#define tag_size 64
+extern void NHT(
+    const uint8_t* input, uint8_t* tag, uint8x16_t *roundKeys_1, const uint64_t lenght
+);
+
+void write_tag_hex(std::ofstream& file, const uint8_t* tag, size_t len = 64) {
+    file << "Tag: ";
+    file << std::hex << std::setfill('0');
+
+    for (size_t i = 0; i < len; i++) {
+        file << std::setw(2)
+             << static_cast<unsigned>(tag[i]);
+    }
+
+    file << std::dec << "\n";
+}
+
+
+// std::string get_cpu_name() {
+//     char buffer[256];
+//     size_t size = sizeof(buffer);
+//     if (sysctlbyname("machdep.cpu.brand_string", buffer, &size, nullptr, 0) == 0) {
+//         return std::string(buffer);
+//     }
+//     return "Unknown CPU";
+// }
+
+std::string get_cpu_name() {
+    std::ifstream cpuinfo("/proc/cpuinfo");
+    std::string line;
+
+    while (std::getline(cpuinfo, line)) {
+        if (line.find("model name") != std::string::npos ||
+            line.find("Model") != std::string::npos) {
+
+            auto pos = line.find(':');
+            if (pos != std::string::npos)
+                return line.substr(pos + 2);
+        }
+    }
+    return "Unknown CPU";
+}
+std::string get_compiler_info() {
+#ifdef __clang__
+    return "Clang C++" +
+           std::to_string(__clang_major__) + "." +
+           std::to_string(__clang_minor__) + "." +
+           std::to_string(__clang_patchlevel__);
+#elif defined(__GNUC__)
+    return "GCC " + std::to_string(__GNUC__);
+#else
+    return "Unknown Compiler";
+#endif
+}
+
+
+std::string get_cpp_standard() {
+#if __cplusplus >= 202002L
+    return "C++20";
+#elif __cplusplus >= 201703L
+    return "C++17";
+#elif __cplusplus >= 201402L
+    return "C++14";
+#else
+    return "Pre-C++14";
+#endif
+}
+
+// Compiler barrier to prevent optimization
+static inline void clobber_memory() {
+    asm volatile("" : : : "memory");
+}
+
+std::string get_arch_info() {
+    std::string arch;
+
+#if defined(__aarch64__)
+    arch = "ARM64";
+#else
+    arch = "Unknown Arch";
 #endif
 
-    ALIGN(16) uint8_t AD[size_message];
-    ALIGN(16) uint8_t ciphertext[size_message];
-    ALIGN(16) uint8_t plaintext[size_message];
+#if defined(__ARM_NEON)
+    arch += " + NEON";
+#endif
 
-int main(int argc, char **argv)
-{
-	/* Allocate locals */
-	ALIGN(16) char pt[8*1024] = {0};
-	ALIGN(16) uint8_t tag[32];
-	ALIGN(16) unsigned char key[] = "abcdefghijklmnop";
-	ALIGN(16) unsigned char nonce[] = "abcdefghijklmnop";
-    
-    uint8x16_t roundKeys_1[Nr + 1];
-    int suma_vectorizada =1;
-	char outbuf[MAX_ITER*15+1024];
-	unsigned int iter_list[2048]; /* Populate w/ test lengths, -1 terminated */
-	char *outp = outbuf;
-	int iters, i, j, len;
-	double Hz,sec;
-	double ipi=0, tmpd;
-	clock_t c;
+#if defined(__ARM_FEATURE_CRYPTO)
+    arch += " + Crypto";
+#endif
 
-	/* populate iter_list, terminate list with negative number */
-	iter_list[0] = 32;
-	iter_list[1] = 64;
-	iter_list[2] = 128;
-	iter_list[3] = 256;
-	iter_list[4] = 512;
-	iter_list[5] = 1024;
-	iter_list[6] = 2048;
-	iter_list[7] = 4096;
-	iter_list[8] = 8192;
-	iter_list[9] = 16384;
-	iter_list[10] = 32768;
-	iter_list[11] = size_message/16;
-	iter_list[12] = size_message/8;
-	iter_list[13] = size_message/4;
-	iter_list[14] =size_message/2;
-	iter_list[15] =size_message;
-	iter_list[16] = -1;
+    return arch;
+}
 
-    /* Create file for writing data */
-	FILE *fp = NULL;
-    char str_time[25];
-	time_t tmp_time = time(NULL);
-	struct tm *tp = localtime(&tmp_time);
-	strftime(str_time, sizeof(str_time), "%F %R", tp);
-	if ((argc < 2) || (argc > 3)) {
-		printf("Usage: %s MHz [output_filename]\n", argv[0]);
-		return 0;
-	} else {
-		Hz = 1e6 * strtol(argv[1], (char **)NULL, 10);
-		if (argc == 3)
-			fp = fopen(argv[2], "w");
-	}
-	
-    outp += sprintf(outp, "%s ", infoString);
-    #if __INTEL_COMPILER
-        outp += sprintf(outp, "- Intel C %d.%d.%d ",
-            (__ICC/100), ((__ICC/10)%10), (__ICC%10));
-    #elif _MSC_VER
-        outp += sprintf(outp, "- Microsoft C %d.%d ",
-            (_MSC_VER/100), (_MSC_VER%100));
-    #elif __clang_major__
-        outp += sprintf(outp, "- Clang C %d.%d.%d ",
-            __clang_major__, __clang_minor__, __clang_patchlevel__);
-    #elif __clang__
-        outp += sprintf(outp, "- Clang C 1.x ");
-    #elif __GNUC__
-        outp += sprintf(outp, "- GNU C %d.%d.%d ",
-            __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
-    #endif
+std::string get_datetime() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm = *std::localtime(&t);
 
-    #if __x86_64__ || _M_X64
-    outp += sprintf(outp, "x86_64 ");
-    #elif __i386__ || _M_IX86
-    outp += sprintf(outp, "x86_32 ");
-    #elif __ARM_ARCH_7__ || __ARM_ARCH_7A__ || __ARM_ARCH_7R__ || __ARM_ARCH_7M__
-    outp += sprintf(outp, "ARMv7 ");
-    #elif __ARM__ || __ARMEL__
-    outp += sprintf(outp, "ARMv5 ");
-    #elif __MIPS__ || __MIPSEL__
-    outp += sprintf(outp, "MIPS32 ");
-    #elif __ppc64__
-    outp += sprintf(outp, "PPC64 ");
-    #elif __ppc__
-    outp += sprintf(outp, "PPC32 ");
-    #elif __sparc__
-    outp += sprintf(outp, "SPARC ");
-    #endif
-
-    outp += sprintf(outp, "- Run %s\n\n",str_time);
-
-	// outp += sprintf(outp, "Context: %d bytes\n", ae_ctx_sizeof());
-
-	printf("Starting run...\n");fflush(stdout);
-
-	/*
-	 * Get time for key setup
-	 */
-	iters = (int)(Hz/520);
-	do {
-	
-        KeyExpansion(key, roundKeys_1);
-
-		c = clock();
-		for (j = 0; j < iters; j++) {
-            KeyExpansion(key, roundKeys_1);
-		}
-		c = clock() - c;
-		sec = c/(double)CLOCKS_PER_SEC;
-		tmpd = (sec * Hz) / (iters);
-		
-		if ((sec < 1.2)||(sec > 1.3))
-			iters = (int)(iters * 5.0/(4.0 * sec));
-		printf("%f\n", sec);
-	} while ((sec < 1.2) || (sec > 1.3));
-	
-	printf("key -- %.2f (%d cycles)\n",sec,(int)tmpd);fflush(stdout);
-	outp += sprintf(outp, "Key setup: %d cycles\n\n", (int)tmpd);
-
-	/*
-	 * Get times over different lengths
-	 */
-	iters = (int)(Hz/1000);
-	i=0;
-	len = iter_list[0];
-	while (len >= 0) {
-	
-		do {
-
-            NHT(plaintext,  tag, key, len);
-
-			c = clock();
-			for (j = 0; j < iters; j++) {
-                NHT(plaintext,  tag, key, len);
-
-				nonce[11] += 1;
-			}
-			c = clock() - c;
-			sec = c/(double)CLOCKS_PER_SEC;
-			tmpd = (sec * Hz) / ((double)len * iters);
-			
-			if ((sec < 1.2)||(sec > 1.3))
-				iters = (int)(iters * 5.0/(4.0 * sec));
-			
-		} while ((sec < 1.2) || (sec > 1.3));
-		
-		printf("%d -- %.2f  (%6.2f cpb)\n",len,sec,tmpd);fflush(stdout);
-		outp += sprintf(outp, "%5d  %6.2f\n", len, tmpd);
-		if (len==44) {
-			ipi += 0.05 * tmpd;
-		} else if (len==552) {
-			ipi += 0.15 * tmpd;
-		} else if (len==576) {
-			ipi += 0.2 * tmpd;
-		} else if (len==1500) {
-			ipi += 0.6 * tmpd;
-		}
-		
-		++i;
-		len = iter_list[i];
-	}
-	outp += sprintf(outp, "ipi %.2f\n", ipi);
-	if (fp) {
-        fprintf(fp, "%s", outbuf);
-        fclose(fp);
-    } else
-        fprintf(stdout, "%s", outbuf);
-
-	return ((pt[0]==12) && (pt[10]==34) && (pt[20]==56) && (pt[30]==78));
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return oss.str();
 }
 
 
 
+int main(int argc, char **argv) {
+
+    if ((argc < 1) || (argc > 2)) {
+		printf("Usage: [output_filename]\n");
+		return 0;
+	} 
+    constexpr double CPU_FREQ = 3.2e9; // Apple M1 ≈ 3.2 GHz
+    constexpr int ITER = 100000;
 
 
 
+    std::ofstream file(argv[1]);
 
+    file << "NHT T=4\n";
+    file << get_cpu_name() << "\n";
+    file << get_compiler_info() << " (" << get_cpp_standard() << ")\n";
+    file << get_arch_info() << "\n";
+    file << "Run " << get_datetime() << "\n\n";
+
+
+    #if !defined(__ARM_FEATURE_CRYPTO)
+    file << "WARNING: Binary compiled without ARM crypto extensions!\n\n";
+    #endif
+
+    // Dummy round keys
+    alignas(16) uint8x16_t roundKeys_zero[11];
+    alignas(16) uint8x16_t roundKeys_one[11];
+    alignas (16) uint8_t key[] = "abcdefghijklmnop";    
+    uint8x16_t roundKeys[11];
+
+    for (int i = 0; i < 11; i++) {
+        roundKeys_zero[i] = vdupq_n_u8(0x00);
+        roundKeys_one[i]  = vdupq_n_u8(0xFF);
+    }
+
+    uint8_t output[tag_size] = {};
+    
+    // file << "Key setup: 483 cycles\n\n";
+
+    std::vector<size_t> sizes = {
+        256, 512, 1024, 2048, 4096, 8192, 16384, 32768
+    };
+
+    for (size_t size : sizes) {
+        std::vector<uint8_t> msg(size);
+        for (size_t i = 0; i < size; i++) {
+            msg[i] = static_cast<uint8_t>(i);
+        }
+        
+        auto start = std::chrono::steady_clock::now();
+        clobber_memory();
+
+        KeyExpansion(key, roundKeys);
+        uint8x16_t *obtained_keys = NULL;
+        size_t num_blocks = size / 16;
+        size_t bytes = 2*num_blocks * sizeof(uint8x16_t);
+        if (posix_memalign((void**)&obtained_keys, 16, bytes) != 0) {
+            perror("posix_memalign");
+            exit(EXIT_FAILURE);
+        }
+
+        for (int it = 0; it < ITER; it++) {
+            generate_keys(roundKeys, size, obtained_keys);
+            asm volatile("" :: "r"(output[0]) : "memory");
+            
+        }
+
+
+        auto end = std::chrono::steady_clock::now();
+
+        double seconds =
+            std::chrono::duration<double>(end - start).count();
+
+        double total_bytes = double(size) * ITER;
+        double cycles = seconds * CPU_FREQ;
+        double cpb = cycles / total_bytes;
+
+        file << size << " -- "
+             << seconds << " s  ("
+             << cpb << " cpb) Key generation\n";
+
+
+        clobber_memory();
+
+        start = std::chrono::steady_clock::now();
+
+        for (int it = 0; it < ITER; it++) {
+            NHT(
+                msg.data(),
+                output,
+                obtained_keys,
+                roundKeys,
+                size
+            );
+
+            // Make output observable
+            asm volatile("" :: "r"(output[0]) : "memory");
+        }
+
+        end = std::chrono::steady_clock::now();
+
+        seconds =
+            std::chrono::duration<double>(end - start).count();
+
+        total_bytes = double(size) * ITER;
+        cycles = seconds * CPU_FREQ;
+        cpb = cycles / total_bytes;
+
+        file << size << " -- "
+             << seconds << " s  ("
+             << cpb << " cpb) NHT\n";
+        write_tag_hex(file, output,tag_size);
+
+        free(obtained_keys);
+    }
+
+    file.close();
+    std::cout << "Benchmark completed.\n";
+    return 0;
+}
