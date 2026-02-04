@@ -1,0 +1,32 @@
+ParaHash-V3 polinomial reduction
+AMD Ryzen 3 4300U with Radeon Graphics
+GCC 11 (C++17)
+Unknown Arch
+Run 2026-02-04 12:37:49
+
+WARNING: Binary compiled without ARM crypto extensions!
+
+256 -- 0.00609978 s  (0.595682 cpb) Key generation
+256 -- 0.00356243 s  (0.347893 cpb) Para-Hash
+Tag: 429e82c295ed02ea7144b8d86f58a85d
+512 -- 0.00673039 s  (0.328632 cpb) Key generation
+512 -- 0.00258315 s  (0.12613 cpb) Para-Hash
+Tag: 3b00b22fdacc21982372df86c94137fb
+1024 -- 0.00895087 s  (0.218527 cpb) Key generation
+1024 -- 0.00513057 s  (0.125258 cpb) Para-Hash
+Tag: d7c16b891934b77c61211b4a7e906fc9
+2048 -- 0.0179132 s  (0.218667 cpb) Key generation
+2048 -- 0.0107112 s  (0.130752 cpb) Para-Hash
+Tag: b7c18ef095a295d961f5864132cabc1c
+4096 -- 0.0358903 s  (0.219057 cpb) Key generation
+4096 -- 0.0209439 s  (0.127832 cpb) Para-Hash
+Tag: d6208b6cd7c65c6d386929435dfef389
+8192 -- 0.0717765 s  (0.219044 cpb) Key generation
+8192 -- 0.0413721 s  (0.126258 cpb) Para-Hash
+Tag: 4427a47bd5a25c85f86449a48b423b46
+16384 -- 0.144161 s  (0.219973 cpb) Key generation
+16384 -- 0.0822035 s  (0.125433 cpb) Para-Hash
+Tag: 5ea1d574662a7f7601f25f8ebc5f09cc
+32768 -- 0.287535 s  (0.219372 cpb) Key generation
+32768 -- 0.164125 s  (0.125218 cpb) Para-Hash
+Tag: 8020bec635c2fc13ab082a51191c8797
