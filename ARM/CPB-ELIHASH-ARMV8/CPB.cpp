@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
 		printf("Usage: [output_filename]\n");
 		return 0;
 	} 
-    constexpr double CPU_FREQ = 3.2e9; // Apple M1 ≈ 3.2 GHz
+    constexpr double CPU_FREQ = 2.4e9; // Apple M1 ≈ 3.2 GHz
     constexpr int ITER = 100000;
 
 

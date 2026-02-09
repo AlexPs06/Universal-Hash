@@ -152,7 +152,7 @@ void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained
      * Main processing loop:
      * Blocks are processed in pairs (X, Y).
      */
-    for (i = 0; i < (size - 1)*2; i = i + 2) {
+    for (i = 0; i < (size - 1); i = i + 2) {
 
   
         /*
