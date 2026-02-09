@@ -2,23 +2,18 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <cstring>
-#include <stdlib.h>
-#include "NHT.h"
+#include "AES-intrinsics.h"
 
-void KeyExpansion(const uint8_t* key, uint8x16_t* roundKeys);
-void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained_keys);
-void NHT(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght);
-uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, int rounds);
+void ExpansionKeys128(const unsigned char *k,  unsigned char keys[11][16] );
 
-#define Toeplitz_matrix 4   // Tamaño del mensaje a procesar
 
+#define Nb 4    // Número de columnas en el estado AES (siempre 4)
+#define Nk 4    // Número de palabras en la clave AES (4 para AES-128)
 #define Nr 10   // Número de rondas para AES-128
 #define size_message 16777216   // Tamaño del mensaje a procesar
+#define Toeplitz_matrix 4   // Tamaño del mensaje a procesar
 
 #define ALIGN(n) __attribute__ ((aligned(n)))
-
-
-
 
 unsigned char Sbox[256]={
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -83,7 +78,7 @@ void KeyExpansion(const uint8_t* key, uint8x16_t* roundKeys) {
     uint8x16_t key_schedule[11];
     uint32x4_t key_schedule_temp=vdupq_n_u32(0);
     // uint8x16_t rcon = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};  // Ejemplo para la primera ronda (Rcon = 0x01)
-    uint32x4_t rcon = {0x01000000, 0, 0, 0};
+    uint32x4_t rcon = {0x01000000, 0, 0, 0};Tamaño del mensaje a procesar
 
     const unsigned char matrizRcon[10]={ 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
 
@@ -126,71 +121,6 @@ void KeyExpansion(const uint8_t* key, uint8x16_t* roundKeys) {
     }
 }
 
-void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained_keys){
-    
-    int64_t i = 0;
-     /*
-     * Define a constant counter increment (used as domain separator /
-     * block index for key generation).
-     */
-    uint32_t constant = 1;
-
-    /*
-     * Vectorized version of the constant and the running index.
-     */
-    uint32x4_t const_vec = vdupq_n_u32(constant);
-    uint32x4_t index     = vdupq_n_u32(constant);
-
-    /*
-     * Compute the number of 128-bit input blocks.
-     * Only full blocks are processed.
-     */
-    int64_t size = length / 16;  // truncation intentional
-
-    
-    /*
-     * Main processing loop:
-     * Blocks are processed in pairs (X, Y).
-     */
-    for (i = 0; i < (size - 1)*2; i = i + 2) {
-
-  
-        /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        uint32x4_t idx0 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx1 = index;
-        index = vaddq_u32(index, const_vec);
-
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
-         */
-        uint8x16_t generate_key_x =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx0),
-                               roundKeys, 8);
-
-        
-
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_y =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx1),
-                               roundKeys, 8);
-
-
-       
-
-        /*
-         * Save the keys in memory.
-         */
-        obtained_keys[i] = generate_key_x;
-        obtained_keys[i+1] = generate_key_y;
-    }
-}
-
 // Realizar cifrado AES de un bloque de 128 bits (10 rondas para AES-128)
 uint8x16_t AES_Encrypt(uint8x16_t block, const uint8x16_t* roundKeys) {
 
@@ -219,6 +149,7 @@ uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, in
     }
     block = vaeseq_u8(block, roundKeys[rounds-1]);    // SubBytes y ShiftRows
     block = vaesmcq_u8(block);                        // MixColumns
+
     block = veorq_u8(block, roundKeys[rounds]);       // AddRoundKey
     // Guardar el bloque cifrado
     // vst1q_u8(output, block);
@@ -226,12 +157,9 @@ uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, in
 }
 
 
-static inline void update_function(uint32x4_t *X,
-                    uint32x4_t *Y,
-                    uint64x2_t * output)
-{
 
-   
+void update_funtion(uint32x4_t *X,uint32x4_t *Y,  uint64x2_t * output){
+    
     // X = M1+K1||M2+K2||M3+K3||M4+K4
     // Y = M5+K5||M6+K6||M7+K7||M8+K8
 
@@ -266,185 +194,162 @@ static inline void update_function(uint32x4_t *X,
         result[i] = vaddq_u64(result_low[i], result_high[i]);    // x0y0||y1y1 + x2y2||y3y3
     }
 
-    for (int i = 0; i < Toeplitz_matrix; i++){
+    for (int i = 0; i < 4; i++){
         output[i] =vaddq_u64(result[i], output[i]);
     }
-
-
-
+    
 }
 
+uint8x16_t block[size_message];
 
-void NHT(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght)
-{
- 
-    uint64_t i = 0;
+void NHT(const uint8_t* input, uint8_t* tag, const uint8_t* key_1, const uint64_t lenght){
+    // Llaves de ronda (11 llaves de 128 bits para AES-128)
+    uint8x16_t roundKeys_1[Toeplitz_matrix][Nr + 1];
+    uint8x16_t roundKeys_2[Nr + 1];
+    uint8x16_t roundKeys_zero[Nr + 1];
+    int i=0;
 
-    /*
-     * Define a constant counter increment (used as domain separator /
-     * block index for key generation).
-     */
+    for (int i = 0; i < Nr; i++)
+    {
+        roundKeys_zero[i] = vdupq_n_u8(0);
+    }
+    uint8_t key_temp[16];
+
+    for (int i = 0; i < 16; i++){
+        key_temp[i]=key_1[i];
+
+    }
+    
+
+    // Generar las llaves de ronda
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        KeyExpansion(key_temp, roundKeys_1[i]);
+        key_temp[0]=key_temp[0]+1;
+    }
+    
+
+
+    
+    // Definir una constante a sumar
     uint32_t constant = 1;
 
-    /*
-     * Vectorized version of the constant and the running index.
-     */
+    // Crear un vector donde cada elemento es la constante
     uint32x4_t const_vec = vdupq_n_u32(constant);
-    uint32x4_t index     = vdupq_n_u32(constant);
-
-    /*
-     * Accumulators for the hash computation.
-     * Each entry stores a 128-bit value split into two 64-bit lanes.
-     */
-
+    uint32x4_t index = vdupq_n_u32(constant);
     uint64x2_t output[Toeplitz_matrix];
 
+    for (i = 0; i < 4; i++){
+        output[i]= vdupq_n_u64(0);
+    }
+     
 
-     for (int i = 0; i < Toeplitz_matrix; i++)
-    {
-        output[i] = vdupq_n_u64(0);
+    int size=0;
+
+    if (lenght%16==0)
+        size=lenght/16;
+
+
+    for (i = 0; i < size; i++){
+        block[i] = vld1q_u8(input+(16*i));
     }
 
-    /*
-     * Compute the number of 128-bit input blocks.
-     * Only full blocks are processed.
-     */
-    uint64_t size = 0;
-    if (lenght % 16 == 0)
-        size = lenght / 16; 
+    for (i = 0; i < size-1; i=i+2){
 
-    /*
-     * Main processing loop:
-     * Blocks are processed in pairs (X, Y).
-     */
-    for (i = 0; i < size - 1; i = i + 2) {
 
-        /*
-         * Load input blocks into NEON registers.
-         */
-        uint8x16_t block_x = vld1q_u8(input + 16*i);
-        uint8x16_t block_y = vld1q_u8(input + 16*(i+1));
+        uint8x16_t generate_key_x[Toeplitz_matrix];
 
-        /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        uint32x4_t idx0 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx1 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx2 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx3 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx4 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx5 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx6 = index;
-        index = vaddq_u32(index, const_vec);
-        uint32x4_t idx7 = index;
-        index = vaddq_u32(index, const_vec);
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
-         */
-        uint8x16_t generate_key_x =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx0),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_y =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx1),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_w =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx2),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_z =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx3),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_i =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx4),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_j =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx5),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_k =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx6),
-                               roundKeys, 8);
-        /*
-         * Generate a pseudo-random mask for block Y.
-         */
-        uint8x16_t generate_key_l =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx7),
-                               roundKeys, 8);
+        for (int j = 0; j < Toeplitz_matrix; j++){
+            generate_key_x[j] = AES_Encrypt_rounds( vreinterpretq_u8_u32(index), roundKeys_1[j], 8); 
+        }
 
-        /*
-         * XOR input blocks with the generated masks and
-         * reinterpret them as 32-bit word vectors.
-         */
+        index=vaddq_u32(index, const_vec);
+        uint8x16_t generate_key_y[Toeplitz_matrix];
+
+        for (int j = 0; j < Toeplitz_matrix; j++){
+            generate_key_x[j] = AES_Encrypt_rounds( vreinterpretq_u8_u32(index), roundKeys_1[j], 8); 
+        }
+
+
+
         uint32x4_t X[Toeplitz_matrix];
         uint32x4_t Y[Toeplitz_matrix]; 
+        for (int j = 0; j < Toeplitz_matrix; j++){
+            X[j] = vreinterpretq_u32_u8(veorq_u8(block[i], generate_key_x[j]));
+            Y[j] = vreinterpretq_u32_u8(veorq_u8(block[i+1], generate_key_y[j]));
 
-        X[0] = vaddq_u32(vreinterpretq_u32_u8(block_x), vreinterpretq_u32_u8(generate_key_x) );
-        Y[0] = vaddq_u32(vreinterpretq_u32_u8(block_y), vreinterpretq_u32_u8(generate_key_i) );
-        
-        X[1] = vaddq_u32(vreinterpretq_u32_u8(block_x), vreinterpretq_u32_u8(generate_key_y) );
-        Y[1] = vaddq_u32(vreinterpretq_u32_u8(block_y), vreinterpretq_u32_u8(generate_key_j) );
 
-        X[2] = vaddq_u32(vreinterpretq_u32_u8(block_x), vreinterpretq_u32_u8(generate_key_w) );
-        Y[2] = vaddq_u32(vreinterpretq_u32_u8(block_y), vreinterpretq_u32_u8(generate_key_k) );
+        }
 
-        X[3] = vaddq_u32(vreinterpretq_u32_u8(block_x), vreinterpretq_u32_u8(generate_key_z) );
-        Y[3] = vaddq_u32(vreinterpretq_u32_u8(block_y), vreinterpretq_u32_u8(generate_key_l) );
+        update_funtion(X, Y, output);
 
-        update_function(X, Y, output);
+
+       index=vaddq_u32(index, const_vec);
+
+    }
+    uint64_t S[Toeplitz_matrix];
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        S[i]=output[i][0]+output[i][1];
 
     }
 
-    /*
-     * Final tag generation.
-     * Currently, the tag is obtained by reinterpreting the
-     * reduced output values as a byte array.
-     */
 
-    //Ultimo bloque
-   
-    memcpy(tag, &output, 16*Toeplitz_matrix);  
+    // Convierte cada uint64_t a 8 uint8_t
+    for (int i = 0; i < Toeplitz_matrix; i++) {
+        for (int j = 0; j < 8; j++) {
+            tag[(i * 8) + j] = (S[i] >> (j * 8)) & 0xFF;
+        }
+    }
 
 }
 
+// int main() {
 
+//     // Clave de 128 bits (16 bytes)
+//     ALIGN(16) uint8_t key_1[16] = {
+//         0x2b,0x28,0xab,0x09, 
+//         0x7e,0xae,0xf7,0xff, 
+//         0x15,0xd2,0x15,0x4f, 
+//         0x16,0xa6,0x88,0x3c
+//     };
 
+//     // Clave de 128 bits (16 bytes)
+//     ALIGN(16) uint8_t key_2[16] = {
+//         0x3b,0x28,0xab,0x09, 
+//         0x7e,0xae,0xf7,0xff, 
+//         0x15,0xd2,0x15,0x4f, 
+//         0x16,0xa6,0x88,0x3c
+//     };
 
+//     // Texto plano de 128 bits (16 bytes)
+//     ALIGN(16) uint8_t plaintext[size_message] = {
+//         0x00, 0x00, 0x01, 0x01, 0x03, 0x03, 0x07, 0x07,  
+//         0x0f, 0x0f, 0x1f, 0x1f, 0x3f, 0x3f, 0x7f, 0x7f,
+//     };
 
-void store_u64_be(uint8_t *dst, uint64_t x)
-{
-    for (int i = 0; i < 8; i++)
-        dst[i] = (uint8_t)(x >> (56 - 8*i));
-}
+//     for (int i = 0; i < size_message; i++)
+//     {
+//         plaintext[i]=i;
+//     }
+//     plaintext[0]=20;
+        
+//     // Resultado del cifrado (16 bytes)
+//     ALIGN(16) uint8_t tag[8*Toeplitz_matrix];
+//     for (int i = 0; i < 8*Toeplitz_matrix; i++){
+//         tag[i]=0;
+//     }
+    
 
-void store_tag(uint8_t *tag, uint64_t r[4])
-{
-    for (int i = 0; i < 4; i++)
-        store_u64_be(tag + 8*i, r[i]);
-}
+//     NHT(plaintext, tag, key_1, key_2, size_message);
 
+//     // Imprimir el resultado cifrado
+//     printf("TAG: ");
+//     for (int i = 0; i < 8*Toeplitz_matrix; i++) {
+//         printf("%02x ", tag[i]);
+//     }
+//     printf("\n");
+
+//     return 0;
+// }
 
 
 

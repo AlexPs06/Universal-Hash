@@ -18,7 +18,7 @@
 
 #define tag_size 64
 extern void NHT(
-    const uint8_t* input, uint8_t* tag, uint8x16_t *roundKeys_1, const uint64_t lenght
+    const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght
 );
 
 void write_tag_hex(std::ofstream& file, const uint8_t* tag, size_t len = 64) {
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
 		printf("Usage: [output_filename]\n");
 		return 0;
 	} 
-    constexpr double CPU_FREQ = 2.4e9; // Apple M1 ≈ 3.2 GHz
+    constexpr double CPU_FREQ = 3.2e9; // Apple M1 ≈ 3.2 GHz
     constexpr int ITER = 100000;
 
 
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
         KeyExpansion(key, roundKeys);
         uint8x16_t *obtained_keys = NULL;
         size_t num_blocks = size / 16;
-        size_t bytes = 2*num_blocks * sizeof(uint8x16_t);
+        size_t bytes = num_blocks * sizeof(uint8x16_t);
         if (posix_memalign((void**)&obtained_keys, 16, bytes) != 0) {
             perror("posix_memalign");
             exit(EXIT_FAILURE);
@@ -211,7 +211,6 @@ int main(int argc, char **argv) {
             NHT(
                 msg.data(),
                 output,
-                obtained_keys,
                 roundKeys,
                 size
             );

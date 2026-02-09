@@ -17,8 +17,8 @@
 #include <sstream>
 
 #define tag_size 16
-extern void EliHASH(
-    const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght
+extern void EliMAC(
+    const uint8_t* input, uint8_t* tag, uint8x16_t *roundKeys_1, const uint64_t lenght
 );
 
 void write_tag_hex(std::ofstream& file, const uint8_t* tag, size_t len = 64) {
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
 		printf("Usage: [output_filename]\n");
 		return 0;
 	} 
-    constexpr double CPU_FREQ = 3.2e9; // Apple M1 ≈ 3.2 GHz
+    constexpr double CPU_FREQ = 2.4e9; // Apple M1 ≈ 3.2 GHz
     constexpr int ITER = 100000;
 
 
@@ -208,9 +208,10 @@ int main(int argc, char **argv) {
         start = std::chrono::steady_clock::now();
 
         for (int it = 0; it < ITER; it++) {
-            EliHASH(
+            EliMAC(
                 msg.data(),
                 output,
+                obtained_keys,
                 roundKeys,
                 size
             );

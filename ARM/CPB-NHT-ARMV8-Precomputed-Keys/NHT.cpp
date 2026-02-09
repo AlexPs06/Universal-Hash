@@ -3,14 +3,14 @@
 #include <stdio.h>
 #include <cstring>
 #include <stdlib.h>
-#include "EliHash.h"
+#include "NHT.h"
 
 void KeyExpansion(const uint8_t* key, uint8x16_t* roundKeys);
 void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained_keys);
-void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght);
+void NHT(const uint8_t* input, uint8_t* tag, const uint8x16_t * keys_1, const uint8x16_t* keys_2, const uint32_t lenght);
 uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, int rounds);
 
-static uint64_t gf_reduce_128(uint64_t hi, uint64_t lo);
+#define Toeplitz_matrix 4   // Tamaño del mensaje a procesar
 
 #define Nr 10   // Número de rondas para AES-128
 #define size_message 16777216   // Tamaño del mensaje a procesar
@@ -19,18 +19,7 @@ static uint64_t gf_reduce_128(uint64_t hi, uint64_t lo);
 
 
 
-static const uint8x16_t roundKeys_zero[Nr + 1] = {
-    [0 ... Nr] = { 0 }
-};
 
-static const uint8x16_t roundKeys_ones[Nr + 1] = {
-    [0 ... Nr] = {
-        0x01, 0x01, 0x01, 0x01,
-        0x01, 0x01, 0x01, 0x01,
-        0x01, 0x01, 0x01, 0x01,
-        0x01, 0x01, 0x01, 0x01
-    }
-};
 unsigned char Sbox[256]={
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -163,7 +152,7 @@ void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained
      * Main processing loop:
      * Blocks are processed in pairs (X, Y).
      */
-    for (i = 0; i < size - 1; i = i + 2) {
+    for (i = 0; i < (size - 1)*2; i = i + 2) {
 
   
         /*
@@ -237,110 +226,56 @@ uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, in
 }
 
 
-static inline void update_function(uint32x4_t X,
-                    uint32x4_t Y,
-                    const uint8x16_t *roundKeys_zero,
-                    const uint8x16_t *roundKeys_ones,
+static inline void update_function(uint32x4_t *X,
+                    uint32x4_t *Y,
                     uint64x2_t * output)
 {
 
    
-    /*
-     * Perform two rounds of AES encryption on X using an all-zero round key.
-     * The result is reinterpreted as two 64-bit polynomials.
-     */
-    poly64x2_t X_prime = vreinterpretq_p64_u8(
-        AES_Encrypt_rounds(vreinterpretq_u8_u32(X), roundKeys_zero, 2)
-    );
+    // X = M1+K1||M2+K2||M3+K3||M4+K4
+    // Y = M5+K5||M6+K6||M7+K7||M8+K8
 
-    /*
-     * Perform two rounds of AES encryption on Y using an all-ones round key.
-     * The result is reinterpreted as two 64-bit polynomials.
-     */
-    poly64x2_t Y_prime = vreinterpretq_p64_u8(
-        AES_Encrypt_rounds(vreinterpretq_u8_u32(Y), roundKeys_ones, 2)
-    );
-
+    //Separacion de las partes bajas y altas
+    uint32x2_t low_X[Toeplitz_matrix];
+    uint32x2_t high_X[Toeplitz_matrix];
+    uint32x2_t low_Y[Toeplitz_matrix];
+    uint32x2_t high_Y[Toeplitz_matrix];
     
 
-    /*
-     * Reinterpret X and Y to 64-bit polynomial components.
-     */
-    poly64x2_t Xp = vreinterpretq_p64_u32(X);
-    poly64x2_t Yp = vreinterpretq_p64_u32(Y);
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        low_X[i] = vget_low_u32(X[i]);   // Contiene {1, 2} de X_i
+        high_X[i] = vget_high_u32(X[i]); // Contiene {3, 4} de X_i
+        low_Y[i] = vget_low_u32(Y[i]);   // Contiene {1, 2} de y_i
+        high_Y[i] = vget_high_u32(Y[i]); // Contiene {3, 4} de Y_i
+    }
+    
+
+    uint64x2_t result_low[Toeplitz_matrix];
+    uint64x2_t result_high[Toeplitz_matrix];
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        // Multiplicacion de las partes altas y bajas x0y0||x1y1||...||u4v4    
+        result_low[i] = vmull_u32(low_X[i], low_Y[i]);    // x0y0||y1y1
+        result_high[i] = vmull_u32(high_X[i], high_Y[i]); // x2y2||y3y3
+
+    }
+    
+    // Suma de las partes altas y bajas    
+    uint64x2_t result[Toeplitz_matrix]; 
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        // suma de las partes altas y bajas x0y0||x1y1||...||u4v4    
+        result[i] = vaddq_u64(result_low[i], result_high[i]);    // x0y0||y1y1 + x2y2||y3y3
+    }
+
+    for (int i = 0; i < Toeplitz_matrix; i++){
+        output[i] =vaddq_u64(result[i], output[i]);
+    }
 
 
-    /*
-     * Split X into its lower and higher 64-bit polynomial components.
-     */
-    poly64x1_t low_X  = vget_low_p64(Xp);   // Lower 64-bit polynomial of X
-    poly64x1_t high_X = vget_high_p64(Xp);  // Higher 64-bit polynomial of X
-
-    /*
-     * Split Y into its lower and higher 64-bit polynomial components.
-     */
-    poly64x1_t low_Y  = vget_low_p64(Yp);   // Lower 64-bit polynomial of Y
-    poly64x1_t high_Y = vget_high_p64(Yp);  // Higher 64-bit polynomial of Y
-
-    /*
-     * Split U (AES(X)) into its lower and higher 64-bit polynomial components.
-     */
-    poly64x1_t low_X_prime  = vget_low_p64(X_prime);   // Lower 64-bit polynomial of X_prime
-    poly64x1_t high_X_prime = vget_high_p64(X_prime);  // Higher 64-bit polynomial of X_prime
-
-    /*
-     * Split T (AES(Y)) into its lower and higher 64-bit polynomial components.
-     */
-    poly64x1_t low_Y_prime  = vget_low_p64(Y_prime);   // Lower 64-bit polynomial of T
-    poly64x1_t high_Y_prime = vget_high_p64(Y_prime);  // Higher 64-bit polynomial of T
-
-    /*
-     * Temporary storage for the 128-bit results of carry-less
-     * polynomial multiplications (PMULL), reinterpreted as
-     * two 64-bit unsigned integers.
-     */
-    uint64x2_t mul_acc[4];
-
-    /*
-     * Carry-less polynomial multiplications over GF(2):
-     *   mul_acc[0] = X_low  * T_low
-     *   mul_acc[1] = X_high * T_high
-     *   mul_acc[2] = U_low  * Y_low
-     *   mul_acc[3] = U_low  * Y_high
-     *
-     * Each vmull_p64 produces a 128-bit polynomial result.
-     */
-    mul_acc[0] = vreinterpretq_u64_p128(vmull_p64(low_X[0],  low_Y_prime[0]));
-    mul_acc[1] = vreinterpretq_u64_p128(vmull_p64(high_X[0], high_Y_prime[0]));
-    mul_acc[2] = vreinterpretq_u64_p128(vmull_p64(low_X_prime[0],  low_Y[0]));
-    mul_acc[3] = vreinterpretq_u64_p128(vmull_p64(high_X_prime[0],  high_Y[0]));
-
-
-    /*
-     * Final reduction step:
-     * Each 128-bit accumulator is reduced to a 64-bit value
-     * x64+x4+x3+x+1
-     * using the GF(2^128) reduction function.
-     */
-    uint64x2_t output_reduction_1;
-    output_reduction_1[0] =  gf_reduce_128(mul_acc[0][1], mul_acc[0][0]);
-    output_reduction_1[1] =  gf_reduce_128(mul_acc[1][1], mul_acc[1][0]);
-
-    uint64x2_t output_reduction_2;
-    output_reduction_2[0] =  gf_reduce_128(mul_acc[2][1], mul_acc[2][0]);
-    output_reduction_2[1] =  gf_reduce_128(mul_acc[3][1], mul_acc[3][0]);
-
-    /*
-     * Accumulate the results into the output buffer using
-     * standard 64-bit integer addition (with carry per lane).
-     */
-    output[0] = vaddq_u64(output_reduction_1, output[0]);
-    output[1] = vaddq_u64(output_reduction_2, output[1]);
 
 }
 
 
-void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght)
+void NHT(const uint8_t* input, uint8_t* tag, const uint8x16_t * keys_1, const uint8x16_t* keys_2, const uint32_t lenght)
 {
  
     uint64_t i = 0;
@@ -349,16 +284,13 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
      * Accumulators for the hash computation.
      * Each entry stores a 128-bit value split into two 64-bit lanes.
      */
-    uint32_t constant = 1;
-    uint32x4_t const_vec = vdupq_n_u32(constant);
-    uint32x4_t index = vdupq_n_u32(constant);
 
-    uint8x16_t roundKeys_zero[Nr + 1];
-    uint8x16_t S = vdupq_n_u8(0);
+    uint64x2_t output[Toeplitz_matrix];
 
-     for (int i = 0; i < Nr; i++)
+
+     for (int i = 0; i < Toeplitz_matrix; i++)
     {
-        roundKeys_zero[i] = vdupq_n_u8(0);
+        output[i] = vdupq_n_u64(0);
     }
 
     /*
@@ -373,41 +305,30 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
      * Main processing loop:
      * Blocks are processed in pairs (X, Y).
      */
-    for (i = 0; i < size - 1; i = i + 1) {
+    for (i = 0; i < size - 1; i = i + 2) {
 
         /*
          * Load input blocks into NEON registers.
          */
         uint8x16_t block_x = vld1q_u8(input + 16*i);
+        uint8x16_t block_y = vld1q_u8(input + 16*(i+1));
 
         /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        uint32x4_t idx0 = index;
-        index = vaddq_u32(index, const_vec);
-
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
+         * Load keys blocks into NEON registers.
          */
-        uint8x16_t generate_key_x =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx0),
-                               roundKeys, 8);
-
-        
-
-        
 
         /*
          * XOR input blocks with the generated masks and
          * reinterpret them as 32-bit word vectors.
          */
-        uint32x4_t X = vreinterpretq_u32_u8(veorq_u8(block_x,   generate_key_x));
+        uint32x4_t X[Toeplitz_matrix];
+        uint32x4_t Y[Toeplitz_matrix]; 
+        for (int j = 0; j < Toeplitz_matrix; j++){
+            X[j] = vaddq_u32(vreinterpretq_u32_u8(block_x), vreinterpretq_u32_u8(keys_1[i]) );
+            Y[j] = vaddq_u32(vreinterpretq_u32_u8(block_y), vreinterpretq_u32_u8(keys_1[i+j+1]) );
+        }
 
-        //Function i
-        uint8x16_t block_I = AES_Encrypt_rounds( X, roundKeys_zero, 4); 
-        //checksum
-        S = veorq_u8(block_I, S);
+        update_function(X, Y, output);
 
     }
 
@@ -418,37 +339,14 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
      */
 
     //Ultimo bloque
-    memcpy(tag, &S, 16);  
+   
+    memcpy(tag, &output, 16*Toeplitz_matrix);  
 
 }
 
 
 
-static uint64_t gf_reduce_128(uint64_t hi, uint64_t lo)
-{
 
-    
-    /* First fold: reduce x^64 terms */
-    lo ^= hi;
-    lo ^= hi << 1;
-    lo ^= hi << 3;
-    lo ^= hi << 4;
-
-    /* Bits that overflowed beyond bit 63 */
-    uint64_t carry =
-        (hi >> 63) ^
-        (hi >> 62) ^
-        (hi >> 60) ^
-        (hi >> 59);
-
-    /* Second fold */
-    lo ^= carry;
-    lo ^= carry << 1;
-    lo ^= carry << 3;
-    lo ^= carry << 4;
-
-    return lo;
-}
 
 void store_u64_be(uint8_t *dst, uint64_t x)
 {

@@ -1,0 +1,30 @@
+EliHash
+Unknown CPU
+Clang C++17.0.0 (C++17)
+ARM64 + NEON + Crypto
+Run 2026-02-09 15:38:59
+
+256 -- 0.00539563 s  (0.674453 cpb) Key generation
+256 -- 0.00658975 s  (0.823719 cpb) EliHash
+Tag: 429e82c295ed02ea7144b8d86f58a85d
+512 -- 0.00832138 s  (0.520086 cpb) Key generation
+512 -- 0.0105959 s  (0.662242 cpb) EliHash
+Tag: 3b00b22fdacc21982372df86c94137fb
+1024 -- 0.0121772 s  (0.380538 cpb) Key generation
+1024 -- 0.0157719 s  (0.492872 cpb) EliHash
+Tag: d7c16b891934b77c61211b4a7e906fc9
+2048 -- 0.018195 s  (0.284297 cpb) Key generation
+2048 -- 0.0227142 s  (0.35491 cpb) EliHash
+Tag: b7c18ef095a295d961f5864132cabc1c
+4096 -- 0.0288155 s  (0.225121 cpb) Key generation
+4096 -- 0.042025 s  (0.328321 cpb) EliHash
+Tag: d6208b6cd7c65c6d386929435dfef389
+8192 -- 0.0572148 s  (0.223495 cpb) Key generation
+8192 -- 0.115074 s  (0.449508 cpb) EliHash
+Tag: 4427a47bd5a25c85f86449a48b423b46
+16384 -- 0.113877 s  (0.222416 cpb) Key generation
+16384 -- 0.169575 s  (0.331202 cpb) EliHash
+Tag: 5ea1d574662a7f7601f25f8ebc5f09cc
+32768 -- 0.227884 s  (0.222543 cpb) Key generation
+32768 -- 0.335846 s  (0.327974 cpb) EliHash
+Tag: 8020bec635c2fc13ab082a51191c8797

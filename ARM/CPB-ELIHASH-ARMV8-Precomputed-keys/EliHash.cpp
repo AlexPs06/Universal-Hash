@@ -7,7 +7,7 @@
 
 void KeyExpansion(const uint8_t* key, uint8x16_t* roundKeys);
 void generate_keys(uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained_keys);
-void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght);
+void EliMAC(const uint8_t* input, uint8_t* tag, const uint8x16_t * keys_1, const uint8x16_t* keys_2, const uint32_t lenght);
 uint8x16_t AES_Encrypt_rounds( uint8x16_t block, const uint8x16_t* roundKeys, int rounds);
 
 static uint64_t gf_reduce_128(uint64_t hi, uint64_t lo);
@@ -337,10 +337,14 @@ static inline void update_function(uint32x4_t X,
     output[0] = vaddq_u64(output_reduction_1, output[0]);
     output[1] = vaddq_u64(output_reduction_2, output[1]);
 
+    
+
+
+
 }
 
 
-void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght)
+void EliMAC(const uint8_t* input, uint8_t* tag, const uint8x16_t * keys_1, const uint8x16_t* keys_2, const uint32_t lenght)
 {
  
     uint64_t i = 0;
@@ -381,22 +385,9 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
         uint8x16_t block_x = vld1q_u8(input + 16*i);
 
         /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        uint32x4_t idx0 = index;
-        index = vaddq_u32(index, const_vec);
-
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
+         * Load keys blocks into NEON registers.
          */
-        uint8x16_t generate_key_x =
-            AES_Encrypt_rounds(vreinterpretq_u8_u32(idx0),
-                               roundKeys, 8);
-
-        
-
-        
+        uint8x16_t generate_key_x = keys_1[i];
 
         /*
          * XOR input blocks with the generated masks and
@@ -409,6 +400,7 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
         //checksum
         S = veorq_u8(block_I, S);
 
+        index=vaddq_u32(index, const_vec);
     }
 
     /*
@@ -418,6 +410,8 @@ void EliHASH(const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, c
      */
 
     //Ultimo bloque
+    S = veorq_u8(vld1q_u8(input + 16*i), S);
+    S = AES_Encrypt(S, keys_2);
     memcpy(tag, &S, 16);  
 
 }

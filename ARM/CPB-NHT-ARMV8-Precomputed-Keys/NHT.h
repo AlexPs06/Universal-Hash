@@ -16,12 +16,9 @@
 extern "C" {
 #endif
 
-
-
-void EliHASH(
-    const uint8_t* input, uint8_t* tag, const uint8x16_t * roundKeys, const uint32_t lenght
+void NHT(
+    const uint8_t* input, uint8_t* tag, const uint8x16_t * keys_1, const uint8x16_t* keys_2, const uint32_t lenght
 );
-
 
 void generate_keys(
     uint8x16_t* roundKeys, uint64_t length, uint8x16_t * obtained_keys
