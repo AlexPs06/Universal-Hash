@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
         AES_128_Key_Expansion(key, roundKeys);
         __m128i *obtained_keys = NULL;
         size_t num_blocks = size / 16;
-        size_t bytes = num_blocks * sizeof(__m128i);
+        size_t bytes = 2*num_blocks * sizeof(__m128i);
         if (posix_memalign((void**)&obtained_keys, 16, bytes) != 0) {
             perror("posix_memalign");
             exit(EXIT_FAILURE);
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
             NHT(
                 msg.data(),
                 output,
-                roundKeys,
+                obtained_keys,
                 size
             );
 

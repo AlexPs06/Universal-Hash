@@ -5,7 +5,7 @@
 #include <iostream>
 #include <vector>
 
-#include "NHT.h"
+#include "EliHASH.h"
 
 #include <wmmintrin.h>
 #include <immintrin.h>
@@ -18,7 +18,7 @@
 #include <string>
 #include <sstream>
 
-#define tag_size 64
+#define tag_size 16
 
 
 
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
 
     std::ofstream file(argv[1]);
 
-    file << "NHT T=4\n";
+    file << "ParaHash-V3 polinomial reduction\n";
     file << get_cpu_name() << "\n";
     file << get_compiler_info() << " (" << get_cpp_standard() << ")\n";
     file << get_arch_info() << "\n";
@@ -201,10 +201,10 @@ int main(int argc, char **argv) {
         start = std::chrono::steady_clock::now();
 
         for (int it = 0; it < ITER; it++) {
-            NHT(
+            EliHASH(
                 msg.data(),
                 output,
-                roundKeys,
+                obtained_keys,
                 size
             );
 
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
 
         file << size << " -- "
              << seconds << " s  ("
-             << cpb << " cpb) NHT\n";
+             << cpb << " cpb) Para-Hash\n";
         write_tag_hex(file, output,tag_size);
 
         free(obtained_keys);

@@ -114,11 +114,23 @@ static inline __m128i gf_reduce_128(__m128i x, __m128i y)
 
 void NHT(const uint8_t* input,
                  uint8_t* tag,
-                 __m128i * keys,
+                 __m128i * roundKeys,
                  const uint64_t lenght)
 {
  
     uint64_t i = 0;
+
+     /*
+     * Define a constant counter increment (used as domain separator /
+     * block index for key generation).
+     */
+    uint32_t constant = 1;
+
+    /*
+     * Vectorized version of the constant and the running index.
+     */
+    __m128i const_vec = _mm_set1_epi32(constant);
+    __m128i index     = _mm_set1_epi32(constant);
 
     /*
      * Accumulators for the hash computation.
@@ -157,20 +169,98 @@ void NHT(const uint8_t* input,
     for (i = 0; i < size - 1; i = i + 2) {
 
         /*
-         * Load keys blocks into NEON registers.
+        * Extra inside index for a better pipeline for the processor.
+        */
+        __m128i idx0 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx1 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx2 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx3 = index;
+        index = _mm_add_epi32(index, const_vec);
+
+        __m128i idx4 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx5 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx6 = index;
+        index = _mm_add_epi32(index, const_vec);
+        __m128i idx7 = index;
+        index = _mm_add_epi32(index, const_vec);
+        
+        /*
+         * Generate a pseudo-random mask for block X
+         * using AES with roundKeys_1 and the current index.
          */
-        __m128i generate_key_x = keys[i];
-        __m128i generate_key_y = keys[i+1];
+        __m128i generate_key_x =
+            AES_Encrypt_rounds(idx0,
+                               roundKeys, 8);
+
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_y =
+            AES_Encrypt_rounds(idx1,
+                               roundKeys, 8);
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_w =
+            AES_Encrypt_rounds(idx2,
+                               roundKeys, 8);
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_z =
+            AES_Encrypt_rounds(idx3,
+                               roundKeys, 8);
+
+
+
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */                     
+        __m128i generate_key_i =
+            AES_Encrypt_rounds(idx4,
+                               roundKeys, 8);
+
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_j =
+            AES_Encrypt_rounds(idx5,
+                               roundKeys, 8);
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_k =
+            AES_Encrypt_rounds(idx6,
+                               roundKeys, 8);
+        /*
+         * Generate a pseudo-random mask for block Y.
+         */
+        __m128i generate_key_l =
+            AES_Encrypt_rounds(idx7,
+                               roundKeys, 8);
         
         /*
          * XOR input blocks with the generated masks and
          * reinterpret them as 32-bit word vectors.
          */
+
+        X[0] = _mm_add_epi32(ptr[i], generate_key_x); 
+        Y[0] = _mm_add_epi32(ptr[i+1], generate_key_i); 
         
-         for (size_t j = 0; j < Toeplitz_matrix; j++){
-            X[j] = _mm_add_epi32(ptr[i], keys[i+j]); 
-            Y[j] = _mm_add_epi32(ptr[i+1], keys[i+j+1]); 
-        }
+        X[1] = _mm_add_epi32(ptr[i], generate_key_y); 
+        Y[1] = _mm_add_epi32(ptr[i+1], generate_key_j);
+
+        X[2] = _mm_add_epi32(ptr[i], generate_key_w); 
+        Y[2] = _mm_add_epi32(ptr[i+1], generate_key_k);
+
+        X[3] = _mm_add_epi32(ptr[i], generate_key_z); 
+        Y[3] = _mm_add_epi32(ptr[i+1], generate_key_l);
+        
          
         /*
          * Update the internal hash state using polynomial
@@ -216,7 +306,7 @@ void generate_keys(__m128i * roundKeys, uint64_t length, __m128i * obtained_keys
      * Main processing loop:
      * Blocks are processed in pairs (X, Y).
      */
-    for (i = 0; i < (size - 1)*2; i = i + 2) {
+    for (i = 0; i < (size - 1); i = i + 2) {
 
   
         /*

@@ -23,7 +23,7 @@
 using namespace std;
 
 
-void EliHASH(const uint8_t* input,uint8_t* tag,__m128i * roundKeys, const uint64_t lenght);
+void EliHASH(const uint8_t* input,uint8_t* tag,__m128i * keys, const uint64_t lenght);
 void AES_128_Key_Expansion(const unsigned char *userkey, void *key);
 static inline void AES_encrypt(__m128i tmp, __m128i *out,__m128i *key, int rounds);
 static inline __m128i gf_reduce_128(__m128i x, __m128i y);
@@ -31,6 +31,7 @@ static inline __m128i AES_Encrypt_rounds(__m128i tmp, __m128i *key, int rounds);
 static inline __m128i AES_Encrypt_rounds_static_keys(__m128i tmp, __m128i key, int rounds);
 
 
+char infoString[]= "Para-Hash AVX128 i7-11700";  /* Each AE implementation must have a global one */
 
 #define Nr 10   // Número de rondas para AES-128
 
@@ -141,22 +142,11 @@ static inline __m128i gf_reduce_128(__m128i x, __m128i y)
 
 void EliHASH(const uint8_t* input,
                  uint8_t* tag,
-                 __m128i * roundKeys,
+                 __m128i * keys,
                  const uint64_t lenght)
 {
  
     uint64_t i = 0;
-    /*
-     * Define a constant counter increment (used as domain separator /
-     * block index for key generation).
-     */
-    uint32_t constant = 1;
-
-    /*
-     * Vectorized version of the constant and the running index.
-     */
-    __m128i const_vec = _mm_set1_epi32(constant);
-    __m128i index     = _mm_set1_epi32(constant);
 
     /*
      * Accumulators for the hash computation.
@@ -192,18 +182,9 @@ void EliHASH(const uint8_t* input,
     for (i = 0; i < size - 1; i = i + 1) {
 
         /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        __m128i idx0 = index;
-        index = _mm_add_epi32(index, const_vec);
-        
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
+         * Load keys blocks into NEON registers.
          */
-        __m128i generate_key_x =
-            AES_Encrypt_rounds(idx0,
-                               roundKeys, 8);
+        __m128i generate_key_x = keys[i];
         
         /*
          * XOR input blocks with the generated masks and

@@ -5,8 +5,7 @@
 #include <pmmintrin.h>
 #include <cstring>
 #define ALIGN(n) __attribute__ ((aligned(n)))
-#define pipeline 1
-#define size_message 16777216   // Tamaño del mensaje a procesar
+#define Toeplitz_matrix 4   // Numero de multiplciaciones
 
 
 #define EXPAND_ASSIST(v1,v2,v3,v4,shuff_const,aes_const)                    \
@@ -23,7 +22,7 @@
 using namespace std;
 
 
-void EliHASH(const uint8_t* input,uint8_t* tag,__m128i * roundKeys, const uint64_t lenght);
+void NHT(const uint8_t* input,uint8_t* tag,__m128i * keys, const uint64_t lenght);
 void AES_128_Key_Expansion(const unsigned char *userkey, void *key);
 static inline void AES_encrypt(__m128i tmp, __m128i *out,__m128i *key, int rounds);
 static inline __m128i gf_reduce_128(__m128i x, __m128i y);
@@ -31,6 +30,7 @@ static inline __m128i AES_Encrypt_rounds(__m128i tmp, __m128i *key, int rounds);
 static inline __m128i AES_Encrypt_rounds_static_keys(__m128i tmp, __m128i key, int rounds);
 
 
+char infoString[]= "NHT T=4 AVX128 i7-11700";  /* Each AE implementation must have a global one */
 
 #define Nr 10   // Número de rondas para AES-128
 
@@ -50,61 +50,34 @@ void imprimiArreglo(int tam, unsigned char *in )
 
 }
 
-ALIGN(16) unsigned char pt[size_message] = {0};
 
 
-static inline void update_function(__m128i X,
-                    __m128i Y,
-                    __m128i roundKeys_zero,
-                    __m128i roundKeys_ones,
+static inline void update_function(__m128i *X,
+                    __m128i *Y,
                     __m128i * output)
 {
 
 
-    /*
-     * Perform two rounds of AES encryption on X using an all-zero round key.
-     * The result is reinterpreted as two 64-bit polynomials.
-     */
-    __m128i X_prime = AES_Encrypt_rounds_static_keys( X, roundKeys_zero, 2);
+    __m128i Resutlt_low[Toeplitz_matrix];
+    __m128i Resutlt_high[Toeplitz_matrix];
+    __m128i Resutlt[Toeplitz_matrix];
 
-    /*
-     * Perform two rounds of AES encryption on Y using an all-ones round key.
-     * The result is reinterpreted as two 64-bit polynomials.
-     */
-    __m128i Y_prime = AES_Encrypt_rounds_static_keys( Y, roundKeys_ones, 2);
-    
-    /*
-     * Temporary storage for the 128-bit results of carry-less
-     * polynomial multiplications (PMULL), reinterpreted as
-     * two 64-bit unsigned integers.
-     */
-    __m128i mul_acc[4];
 
-    /*
-     * Carry-less polynomial multiplications over GF(2):
-     *   mul_acc[0] = X_low  * T_low
-     *   mul_acc[1] = X_high * T_high
-     *   mul_acc[2] = U_low  * Y_low
-     *   mul_acc[3] = U_low  * Y_high
-     *
-     * Each vmull_p64 produces a 128-bit polynomial result.
-     */
-    
-    mul_acc[0] = _mm_clmulepi64_si128 (X, Y_prime, 0x00);
-    mul_acc[1] = _mm_clmulepi64_si128 (X, Y_prime, 0x11);
-    mul_acc[2] = _mm_clmulepi64_si128 (X_prime, Y, 0x00);
-    mul_acc[3] = _mm_clmulepi64_si128 (X_prime, Y, 0x11);
-
-  
-    /*static inline void
-     * Accumulate the results into the output buffer using
-     * standard 64-bit integer addition (with carry per lane).
-     */
-
-    output[0] = _mm_xor_si128(mul_acc[0], output[0]);
-    output[1] = _mm_xor_si128(mul_acc[1], output[1]);
-    output[2] = _mm_xor_si128(mul_acc[2], output[2]);
-    output[3] = _mm_xor_si128(mul_acc[3], output[3]);
+	for (size_t i = 0; i < Toeplitz_matrix; i++)
+	{
+		//hay un ligero detalle aca tengo x0y0||x2y2
+		Resutlt_low[i] = _mm_mul_epu32(X[i],Y[i]); // x0y0||y2y2
+		// x1y1||x3y3
+		Resutlt_high[i] = _mm_mul_epu32(_mm_srli_epi64(X[i],32),_mm_srli_epi64(Y[i],32)); // x1y1||y3y3
+	}
+	for (size_t i = 0; i < Toeplitz_matrix; i++)
+	{
+		Resutlt[i] = _mm_add_epi64(Resutlt_low[i],Resutlt_high[i]);
+	}
+	for (size_t i = 0; i < Toeplitz_matrix; i++)
+	{
+		output[i] = _mm_add_epi64(output[i],Resutlt[i]);
+	}
 }
 
 
@@ -139,35 +112,27 @@ static inline __m128i gf_reduce_128(__m128i x, __m128i y)
 }
 
 
-void EliHASH(const uint8_t* input,
+void NHT(const uint8_t* input,
                  uint8_t* tag,
-                 __m128i * roundKeys,
+                 __m128i * keys,
                  const uint64_t lenght)
 {
  
     uint64_t i = 0;
-    /*
-     * Define a constant counter increment (used as domain separator /
-     * block index for key generation).
-     */
-    uint32_t constant = 1;
-
-    /*
-     * Vectorized version of the constant and the running index.
-     */
-    __m128i const_vec = _mm_set1_epi32(constant);
-    __m128i index     = _mm_set1_epi32(constant);
 
     /*
      * Accumulators for the hash computation.
      * Each entry stores a 128-bit value split into two 64-bit lanes.
      */
-    __m128i output[4];
+    __m128i output[Toeplitz_matrix];
+
+    __m128i X[Toeplitz_matrix];
+    __m128i Y[Toeplitz_matrix];
     
     /*
      * Initialize accumulators to zero.
      */
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < Toeplitz_matrix; i++) {
         output[i] = _mm_setzero_si128();
     }
 
@@ -189,34 +154,29 @@ void EliHASH(const uint8_t* input,
      * Blocks are processed in pairs (X, Y).
      */
     
-    for (i = 0; i < size - 1; i = i + 1) {
+    for (i = 0; i < size - 1; i = i + 2) {
 
         /*
-        * Extra inside index for a better pipeline for the processor.
-        */
-        __m128i idx0 = index;
-        index = _mm_add_epi32(index, const_vec);
-        
-        /*
-         * Generate a pseudo-random mask for block X
-         * using AES with roundKeys_1 and the current index.
+         * Load keys blocks into NEON registers.
          */
-        __m128i generate_key_x =
-            AES_Encrypt_rounds(idx0,
-                               roundKeys, 8);
+        __m128i generate_key_x = keys[i];
+        __m128i generate_key_y = keys[i+1];
         
         /*
          * XOR input blocks with the generated masks and
          * reinterpret them as 32-bit word vectors.
          */
-        __m128i X = _mm_xor_si128(ptr[i], generate_key_x); 
         
-        output[0] = _mm_xor_si128(AES_Encrypt_rounds_static_keys(X, RK_ZERO, 4), output[0]);
-
+         for (size_t j = 0; j < Toeplitz_matrix; j++){
+            X[j] = _mm_add_epi32(ptr[i], keys[i+j]); 
+            Y[j] = _mm_add_epi32(ptr[i+1], keys[i+j+1]); 
+        }
+         
         /*
          * Update the internal hash state using polynomial
          * multiplications and integer accumulation.
          */
+        update_function(X,Y, output);
 
     }
 
@@ -226,7 +186,7 @@ void EliHASH(const uint8_t* input,
      * Currently, the tag is obtained by reinterpreting the
      * reduced output values as a byte array.
      */
-    memcpy(tag, output, 16);  
+    memcpy(tag, output, 16*Toeplitz_matrix);  
 
 }
 
@@ -256,7 +216,7 @@ void generate_keys(__m128i * roundKeys, uint64_t length, __m128i * obtained_keys
      * Main processing loop:
      * Blocks are processed in pairs (X, Y).
      */
-    for (i = 0; i < size - 1; i = i + 2) {
+    for (i = 0; i < (size - 1)*2; i = i + 2) {
 
   
         /*
