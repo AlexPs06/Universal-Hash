@@ -1,0 +1,25 @@
+# =========================
+# Sistema operativo (macOS)
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# =========================
+# Archivos de compilación
+# =========================
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# =========================
+# Git
+# =========================
+*.orig
+
+test
